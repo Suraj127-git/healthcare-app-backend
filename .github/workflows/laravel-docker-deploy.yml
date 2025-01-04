@@ -1,4 +1,4 @@
-name: Laravel Docker Deploy with Vault
+name: Laravel Docker Deploy
 
 on:
   push:
