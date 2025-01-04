@@ -1,35 +1,24 @@
-# Use an official PHP runtime with Alpine for a lightweight image
-FROM php:8.2-fpm-alpine3.18 AS base
+# Build stage
+FROM php:8.2-fpm-alpine3.18 AS builder
 
-# Set working directory
-WORKDIR /var/www/html
-
-# Install system dependencies
-RUN apk --no-cache add \
+# Install build dependencies
+RUN apk add --no-cache --virtual .build-deps \
     git \
     curl \
-    wget \
     libzip-dev \
-    nginx \
-    supervisor \
-    nodejs \
-    npm \
     build-base \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
-    mysql-client \
     zlib-dev \
     libxml2-dev \
     linux-headers \
     autoconf \
-    bash \
-    tzdata \
     openssl-dev
 
-# Install PHP extensions
+# Install and configure PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install \
+    && docker-php-ext-install -j$(nproc) \
         pdo_mysql \
         gd \
         zip \
@@ -39,44 +28,61 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && pecl install excimer mongodb \
     && docker-php-ext-enable excimer mongodb
 
-# Copy PHP and Nginx configurations
+# Install composer
+COPY --from=composer:2.6.5 /usr/bin/composer /usr/bin/composer
+
+# Copy only composer files first
+COPY composer.* ./
+
+# Install dependencies
+RUN composer install --no-dev --no-interaction --optimize-autoloader --prefer-dist --no-progress --no-scripts
+
+# Production stage
+FROM php:8.2-fpm-alpine3.18 AS production
+
+# Install production dependencies
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    mysql-client \
+    nodejs \
+    npm \
+    tzdata \
+    bash
+
+# Copy PHP extensions and configs from builder
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Copy configuration files
 COPY docker/php/php.ini /usr/local/etc/php/php.ini
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisor/supervisord.conf /etc/supervisord.conf
 
+# Copy application files and vendor
+COPY . .
+COPY --from=builder /var/www/html/vendor/ ./vendor/
+
 # Set PHP to production mode
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-# Add a non-root user for application security
-RUN addgroup -S laravel && adduser -S laravel -G laravel
+# Add non-root user and set permissions
+RUN addgroup -S laravel && adduser -S laravel -G laravel \
+    && chown -R laravel:laravel /var/www/html \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache \
+    && find storage/logs/ -type f -name "*.log" -exec chmod 775 {} \;
 
-# Set up Composer (using the official Composer image)
-COPY --from=composer:2.6.5 /usr/bin/composer /usr/bin/composer
+# Set production environment variables
+ENV APP_ENV=production \
+    APP_DEBUG=false
 
-# Copy application files
-COPY . /var/www/html
-
-# Install PHP dependencies (Composer)
-RUN composer install --no-interaction --optimize-autoloader --prefer-dist --no-progress --no-suggest \
-    && rm -rf /var/www/html/.env.example
-
-# Final lightweight image for production
-FROM base AS production
-
-# Set environment variables for production
-ENV APP_ENV=production
-ENV APP_DEBUG=false
-
-# Switch to root user to set permissions
-USER root
-
-# Set proper permissions for storage, cache, and log directories
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
-    && chmod -R 775 /var/www/html/storage/logs /var/www/html/bootstrap/cache \
-    && find /var/www/html/storage/logs/ -type f -name "*.log" -exec chmod 775 {} \;
-
-# Expose port 80 for Nginx
+# Expose port and set user
 EXPOSE 80
+USER laravel
 
-# Command to run supervisord (manages Nginx & PHP-FPM)
+# Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
