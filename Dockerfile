@@ -69,6 +69,8 @@ COPY --from=builder /var/www/html/vendor/ ./vendor/
 # Set PHP to production mode
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
+USER root
+
 # Add non-root user and set permissions
 RUN addgroup -S laravel && adduser -S laravel -G laravel \
     && chown -R laravel:laravel /var/www/html \
@@ -82,7 +84,7 @@ ENV APP_ENV=production \
 
 # Expose port and set user
 EXPOSE 80
-USER laravel
+
 
 # Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
