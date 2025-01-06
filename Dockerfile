@@ -85,6 +85,5 @@ ENV APP_ENV=production \
 # Expose port and set user
 EXPOSE 80
 
-
 # Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
