@@ -1,4 +1,4 @@
-# Build stage
+# Builder stage
 FROM php:8.2-fpm-alpine3.18 AS builder
 
 # Install build dependencies
@@ -45,10 +45,10 @@ RUN apk add --no-cache \
     nginx \
     supervisor \
     mysql-client \
-    nodejs \
-    npm \
-    tzdata \
-    bash
+    tzdata
+
+# Remove any unnecessary packages
+RUN apk del --no-cache
 
 # Copy PHP extensions and configs from builder
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
@@ -69,8 +69,6 @@ COPY --from=builder /var/www/html/vendor/ ./vendor/
 # Set PHP to production mode
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-USER root
-
 # Add non-root user and set permissions
 RUN addgroup -S laravel && adduser -S laravel -G laravel \
     && chown -R laravel:laravel /var/www/html \
@@ -82,8 +80,11 @@ RUN addgroup -S laravel && adduser -S laravel -G laravel \
 ENV APP_ENV=production \
     APP_DEBUG=false
 
-# Expose port and set user
+# Expose port
 EXPOSE 80
+
+# Ensure CMD runs as root
+USER root
 
 # Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
