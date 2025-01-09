@@ -38,17 +38,15 @@ COPY composer.* ./
 RUN composer install --no-dev --no-interaction --optimize-autoloader --prefer-dist --no-progress --no-scripts
 
 # Production stage
-FROM php:8.2-fpm-alpine3.18 AS production
+FROM php:8.2-alpine AS production
 
 # Install production dependencies
 RUN apk add --no-cache \
     nginx \
     supervisor \
     mysql-client \
+    php-fpm \
     tzdata
-
-# Remove any unnecessary packages
-RUN apk del --no-cache
 
 # Copy PHP extensions and configs from builder
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
@@ -80,11 +78,12 @@ RUN addgroup -S laravel && adduser -S laravel -G laravel \
 ENV APP_ENV=production \
     APP_DEBUG=false
 
+# Set user to root
+USER root
+
 # Expose port
 EXPOSE 80
 
-# Ensure CMD runs as root
-USER root
-
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+# Set entrypoint and command
+ENTRYPOINT ["/usr/bin/supervisord"]
+CMD ["-c", "/etc/supervisord.conf"]
