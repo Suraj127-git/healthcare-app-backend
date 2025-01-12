@@ -2,7 +2,10 @@
 
 namespace App\Providers;
 
+use app;
+use App\Repository\RegisterRepository;
 use Illuminate\Support\ServiceProvider;
+use App\Repository\Mysql\RegisterRepositoryImpl;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -11,7 +14,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(RegisterRepository::class, RegisterRepositoryImpl::class);
+        
     }
 
     /**
