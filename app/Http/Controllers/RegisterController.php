@@ -2,37 +2,37 @@
 
 namespace App\Http\Controllers;
 
+use App\DTOs\RegisterRequestDTO;
 use App\Service\RegisterService;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RegisterRequest;
 
-
 class RegisterController extends Controller
 {
     public function __construct(protected RegisterService $registerService)
-    {
-    }
+    {}
 
-    public function registerProcess(RegisterRequest $registerRequest)
+    public function registerProcess(RegisterRequest $request)
     {
         try {
-            Log::channel('info')->info('Registration attempt', ['data' => $registerRequest->safe()->all()]);
+            Log::channel('info')->info('Registration attempt', ['data' => $request->validated()]);
             
-            $responseData = $this->registerService->register($registerRequest);
+            $dto = RegisterRequestDTO::fromRequest($request->validated());
+            $response = $this->registerService->register($dto);
             
-            if ($responseData['status'] === 'success') {
+            if ($response->status === 'success') {
                 return response()->json([
-                    'message' => 'Registration successful',
-                    'data' => $responseData['data']
+                    'message' => $response->message,
+                    'data' => $response->data
                 ], 201);
             }
 
-            $statusCode = $responseData['message'] === 'Email is already registered' ? 422 : 400;
+            $statusCode = $response->message === 'Email is already registered' ? 422 : 400;
             
             return response()->json([
-                'message' => $responseData['message'],
-                'errors' => ['email' => [$responseData['message']]]
+                'message' => $response->message,
+                'errors' => ['email' => [$response->message]]
             ], $statusCode);
 
         } catch (\Exception $exception) {
